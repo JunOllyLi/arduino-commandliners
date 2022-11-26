@@ -6,10 +6,10 @@
 MCU ?= cortex-m4
 FPU ?= fpv4-sp-d16
 ISAFLAGS  = -mcpu=$(MCU) -mfpu=$(FPU) -mfloat-abi=hard -mthumb
-VARIANT = NUCLEO_F4x1RE
+VARIANT = STM32F4xx/F405RGT_F415RGT
+VARIANT_FLAG = -DVARIANT_H=\"variant_FEATHER_F405.h\"
 HAL_SRC = STM32F4xx
-ARD_CFLAGS := -DSTM32F4xx -DARDUINO=10813 -DARDUINO_NUCLEO_F411RE -DARDUINO_ARCH_STM32 -DBOARD_NAME="NUCLEO_F411RE" -DSTM32F411xE -DHAL_UART_MODULE_ENABLED
-MASS_OPTION = -O "NODE_F411RE,NUCLEO"
+ARD_CFLAGS := -DSTM32F4xx -DARDUINO=10813 -DARDUINO_FEATHER_F405 -DARDUINO_ARCH_STM32 -DBOARD_NAME="FEATHER_F405" -DSTM32F405xx -DHAL_UART_MODULE_ENABLED
 
 ## Select the serial port for your board
 #MONITOR_PORT ?= /dev/ttyACM0
@@ -29,13 +29,13 @@ BIN := $(TARGET).bin
 HEX := $(TARGET).hex
 
 # Change them where Arduino IDE is installed
-ARM_GCC_PATH := $(HOME)/.arduino15/packages/STM32/tools/xpack-arm-none-eabi-gcc/9.2.1-1.1/bin/
+ARM_GCC_PATH := $(HOME)/.arduino15/packages/STMicroelectronics/tools/xpack-arm-none-eabi-gcc/10.3.1-2.3/bin
 
-ARDUINO_DIR = $(HOME)/.arduino15/packages/STM32/hardware/stm32/1.9.0
+ARDUINO_DIR = $(HOME)/.arduino15/packages/STMicroelectronics/hardware/stm32/2.3.0/
 ARDUINO_CORE_PATH = $(ARDUINO_DIR)/cores/arduino
 ARDUINO_VAR_PATH ?= $(ARDUINO_DIR)/variants
-TOOLS_DIR = $(HOME)/.arduino15/packages/STM32/tools
-CMSIS_DIR = $(TOOLS_DIR)/CMSIS/5.5.1
+TOOLS_DIR = $(HOME)/.arduino15/packages/STMicroelectronics/tools
+CMSIS_DIR = $(TOOLS_DIR)/CMSIS/5.7.0
 
 # Only have to edit above
 #############################################################################
@@ -53,8 +53,8 @@ MASS_TOOL := $(TOOLS_DIR)/STM32Tools/1.4.0/tools/linux/massStorageCopy.sh
 
 all: $(CORE_LIB) $(ELF) $(BIN) $(HEX)
 
-CFLAGS_STD = -std=gnu11 -ffunction-sections -fdata-sections -nostdlib --param max-inline-insns-single=500
-CXXFLAGS_STD = -std=gnu++14 -ffunction-sections -fdata-sections -nostdlib -fno-threadsafe-statics --param max-inline-insns-single=500 -fno-rtti -fno-exceptions -fno-use-cxa-atexit
+CFLAGS_STD = -std=gnu11 -ffunction-sections -fdata-sections -nostdlib --param max-inline-insns-single=500 ${VARIANT_FLAG}
+CXXFLAGS_STD = -std=gnu++14 -ffunction-sections -fdata-sections -nostdlib -fno-threadsafe-statics --param max-inline-insns-single=500 -fno-rtti -fno-exceptions -fno-use-cxa-atexit ${VARIANT_FLAG}
 
 LOCAL_C_SRCS    ?= $(wildcard *.c)
 LOCAL_CPP_SRCS  ?= $(wildcard *.cpp)
@@ -227,7 +227,7 @@ $(OBJDIR)/userlibs/%.S.o: $(USER_LIB_PATH)/%.S
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
 
-LDFLAGS = $(ISAFLAGS) -Os --specs=nano.specs -Wl,--defsym=LD_FLASH_OFFSET=0 -Wl,--defsym=LD_MAX_SIZE=524288 -Wl,--defsym=LD_MAX_DATA_SIZE=131072 -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--default-script=$(ARDUINO_DIR)/variants/$(VARIANT)/ldscript.ld -Wl,--script=$(ARDUINO_DIR)/system/ldscript.ld -L$(CMSIS_DIR)/CMSIS/DSP/Lib/GCC/ -larm_cortexM4lf_math -Wl,--start-group
+LDFLAGS = $(ISAFLAGS) ${VARIANT_FLAG} -Os --specs=nano.specs -Wl,--defsym=LD_FLASH_OFFSET=0 -Wl,--defsym=LD_MAX_SIZE=524288 -Wl,--defsym=LD_MAX_DATA_SIZE=131072 -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--default-script=$(ARDUINO_DIR)/variants/$(VARIANT)/ldscript.ld -Wl,--script=$(ARDUINO_DIR)/system/ldscript.ld -L$(CMSIS_DIR)/CMSIS/DSP/Lib/GCC/ -larm_cortexM4lf_math -Wl,--start-group
 
 $(CORE_LIB): $(VAL_OBJS) $(CORE_OBJS) $(HAL_OBJS) $(DRV_OBJS) $(LIB_OBJS) $(USER_LIB_OBJS)
 	$(AR) rcs $@ $^
