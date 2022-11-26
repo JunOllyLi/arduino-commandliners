@@ -2,41 +2,21 @@
 # Adjast for your board
 # Manually add them which Arduino IDE gives automotically
 
-## Uno 5V 16MHz
-AVR_FREQ ?= 16000000L
-MCU ?= atmega328p
-VARIANT = standard
-ARD_CFLAGS := -DARDUINO=10813 -DARDUINO_AVR_UNO -DARDUINO_ARCH_AVR
-MONITOR_PORT ?= /dev/ttyACM0
-MONITOR_BAUDRATE = 115200
-AVRDUDE_PROGRAMMER = arduino # choose it from upload.protocol in boards.txt
-
-## Pro Micro 5V 16MHz from SparkFun
-#AVR_FREQ ?= 16000000L
-#MCU ?= atmega32u4
-#ARDUINO_VAR_PATH := $(HOME)/.arduino15/packages/SparkFun/hardware/avr/1.1.13/variants
-#VARIANT = promicro
-#ARD_CFLAGS := -DARDUINO=10813 -DARDUINO_AVR_MICRO -DARDUINO_ARCH_AVR \
-#	-DUSB_VID=0x1b4f -DUSB_PID=0x9206
-#MONITOR_PORT ?= /dev/ttyUSB0
-#MONITOR_BAUDRATE = 57600
-#AVRDUDE_PROGRAMMER = avr109
-
-## Pro Mini 5V 16MHz
-#AVR_FREQ ?= 16000000L
-#MCU ?= atmega328p
-#VARIANT = standard
-#ARD_CFLAGS := -DARDUINO=10813 -DARDUINO_AVR_PRO -DARDUINO_ARCH_AVR
-#MONITOR_PORT ?= /dev/ttyUSB0
-#MONITOR_BAUDRATE = 57600
-#AVRDUDE_PROGRAMMER = arduino
+## NUCLEO-F411RE
+MCU ?= cortex-m4
+FPU ?= fpv4-sp-d16
+ISAFLAGS  = -mcpu=$(MCU) -mfpu=$(FPU) -mfloat-abi=hard -mthumb
+VARIANT = STM32F4xx/F405RGT_F415RGT
+VARIANT_FLAG = -DVARIANT_H=\"variant_FEATHER_F405.h\"
+HAL_SRC = STM32F4xx
+ARD_CFLAGS := -DSTM32F4xx -DARDUINO=10813 -DARDUINO_FEATHER_F405 -DARDUINO_ARCH_STM32 -DBOARD_NAME="FEATHER_F405" -DSTM32F405xx -DHAL_UART_MODULE_ENABLED
 
 ## Select the serial port for your board
 #MONITOR_PORT ?= /dev/ttyACM0
 #MONITOR_PORT ?= /dev/ttyUSB0
 
 # List library names you only use in your sources
-ARDUINO_LIBS ?= SoftwareSerial
+ARDUINO_LIBS ?= SoftwareSerial SD SeeedGrayOLED USBcore Wire
 USER_LIB_PATH ?= $(HOME)/sketchbook/libraries
 
 # File name of your sources
@@ -49,9 +29,13 @@ BIN := $(TARGET).bin
 HEX := $(TARGET).hex
 
 # Change them where Arduino IDE is installed
-ARDUINO_DIR = $(HOME)/projects/arduino-1.8.13-linux64/arduino-1.8.13
-ARDUINO_CORE_PATH = $(ARDUINO_DIR)/hardware/arduino/avr/cores/arduino
-ARDUINO_VAR_PATH ?= $(ARDUINO_DIR)/hardware/arduino/avr/variants
+ARM_GCC_PATH := $(HOME)/.arduino15/packages/STMicroelectronics/tools/xpack-arm-none-eabi-gcc/10.3.1-2.3/bin
+
+ARDUINO_DIR = $(HOME)/.arduino15/packages/STMicroelectronics/hardware/stm32/2.3.0/
+ARDUINO_CORE_PATH = $(ARDUINO_DIR)/cores/arduino
+ARDUINO_VAR_PATH ?= $(ARDUINO_DIR)/variants
+TOOLS_DIR = $(HOME)/.arduino15/packages/STMicroelectronics/tools
+CMSIS_DIR = $(TOOLS_DIR)/CMSIS/5.7.0
 
 # Only have to edit above
 #############################################################################
@@ -61,15 +45,16 @@ ARDUINO_VAR_PATH ?= $(ARDUINO_DIR)/hardware/arduino/avr/variants
 OBJDIR = .
 CORE_LIB = $(OBJDIR)/libcore.a
 
-CC := avr-gcc
-CXX := avr-g++
-OBJCOPY := avr-objcopy
-AR := avr-gcc-ar
+CC := $(ARM_GCC_PATH)/arm-none-eabi-gcc 
+CXX := $(ARM_GCC_PATH)/arm-none-eabi-g++
+OBJCOPY := $(ARM_GCC_PATH)/arm-none-eabi-objcopy
+AR := $(ARM_GCC_PATH)/arm-none-eabi-gcc-ar
+MASS_TOOL := $(TOOLS_DIR)/STM32Tools/1.4.0/tools/linux/massStorageCopy.sh
 
 all: $(CORE_LIB) $(ELF) $(BIN) $(HEX)
 
-CFLAGS_STD = -std=gnu11 -flto -fno-fat-lto-objects
-CXXFLAGS_STD = -fpermissive -fno-exceptions -std=gnu++11 -fno-threadsafe-statics -flto
+CFLAGS_STD = -std=gnu11 -ffunction-sections -fdata-sections -nostdlib --param max-inline-insns-single=500 ${VARIANT_FLAG}
+CXXFLAGS_STD = -std=gnu++14 -ffunction-sections -fdata-sections -nostdlib -fno-threadsafe-statics --param max-inline-insns-single=500 -fno-rtti -fno-exceptions -fno-use-cxa-atexit ${VARIANT_FLAG}
 
 LOCAL_C_SRCS    ?= $(wildcard *.c)
 LOCAL_CPP_SRCS  ?= $(wildcard *.cpp)
@@ -81,12 +66,10 @@ LOCAL_SRCS      = $(LOCAL_C_SRCS)   $(LOCAL_CPP_SRCS) \
                 $(LOCAL_CC_SRCS)   $(LOCAL_PDE_SRCS) \
                 $(LOCAL_INO_SRCS) $(LOCAL_AS_SRCS)
 
-ARDUINO_LIB_PATH1 = $(ARDUINO_DIR)/libraries
-ARDUINO_LIB_PATH2 = $(ARDUINO_DIR)/hardware/arduino/avr/libraries
+ARDUINO_LIB_PATH = $(ARDUINO_DIR)/libraries
+STM32_HAL_PATH   = $(ARDUINO_DIR)/system
 
-ARDUINO_LIBS += $(filter $(notdir $(wildcard $(ARDUINO_LIB_PATH1)/*)), \
-	$(shell sed -ne 's/^ *\# *include *[<\"]\(.*\)\.h[>\"]/\1/p' $(LOCAL_SRCS)))
-ARDUINO_LIBS += $(filter $(notdir $(wildcard $(ARDUINO_LIB_PATH2)/*)), \
+ARDUINO_LIBS += $(filter $(notdir $(wildcard $(ARDUINO_LIB_PATH)/*)), \
 	$(shell sed -ne 's/^ *\# *include *[<\"]\(.*\)\.h[>\"]/\1/p' $(LOCAL_SRCS)))
 ARDUINO_LIBS += $(filter $(notdir $(wildcard $(USER_LIB_PATH)/*)), \
 	$(shell sed -ne 's/^ *\# *include *[<\"]\(.*\)\.h[>\"]/\1/p' $(LOCAL_SRCS)))
@@ -94,28 +77,66 @@ ARDUINO_LIBS += $(filter $(notdir $(wildcard $(USER_LIB_PATH)/*)), \
 USER_LIBS      := $(sort $(wildcard $(patsubst %,$(USER_LIB_PATH)/%,$(ARDUINO_LIBS))))
 USER_LIB_NAMES := $(patsubst $(USER_LIB_PATH)/%,%,$(USER_LIBS))
 
-SYS_LIBS       := $(sort $(wildcard $(patsubst %,$(ARDUINO_LIB_PATH1)/%,$(filter-out $(USER_LIB_NAMES),$(ARDUINO_LIBS)))))
-SYS_LIBS       += $(sort $(wildcard $(patsubst %,$(ARDUINO_LIB_PATH2)/%,$(filter-out $(USER_LIB_NAMES),$(ARDUINO_LIBS)))))
-SYS_LIB_NAMES  := $(patsubst $(ARDUINO_LIB_PATH1)/%,%,$(SYS_LIBS))
-SYS_LIB_NAMES  += $(patsubst $(ARDUINO_LIB_PATH2)/%,%,$(SYS_LIBS))
+SYS_LIBS       := $(sort $(wildcard $(patsubst %,$(ARDUINO_LIB_PATH)/%,$(filter-out $(USER_LIB_NAMES),$(ARDUINO_LIBS)))))
+SYS_LIB_NAMES  := $(patsubst $(ARDUINO_LIB_PATH)/%,%,$(SYS_LIBS))
+
+rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
 
 get_library_includes = $(if $(and $(wildcard $(1)/src), $(wildcard $(1)/library.properties)), \
 	-I$(1)/src, \
 	$(addprefix -I,$(1) $(wildcard $(1)/utility)))
 
-SYS_INCLUDES        := $(foreach lib, $(SYS_LIBS),  $(call get_library_includes,$(lib)))
-USER_INCLUDES       := $(foreach lib, $(USER_LIBS), $(call get_library_includes,$(lib)))
+SYS_INCLUDES    := $(foreach lib, $(SYS_LIBS),  $(call get_library_includes,$(lib)))
+SYS_INCLUDES    += -I$(ARDUINO_CORE_PATH)/stm32
+USER_INCLUDES   := $(foreach lib, $(USER_LIBS), $(call get_library_includes,$(lib)))
 
-INCLUDES = $(ARD_CFLAGS) -I$(ARDUINO_CORE_PATH) -I$(ARDUINO_VAR_PATH)/$(VARIANT) \
-        $(SYS_INCLUDES) $(PLATFORM_INCLUDES) $(USER_INCLUDES)
+HAL_LIB_PATH  = $(ARDUINO_DIR)/libraries/SrcWrapper/src
+HAL_DRV_PATH  = $(STM32_HAL_PATH)/Drivers/$(HAL_SRC)_HAL_Driver/Src
+HAL_PATH      = $(HAL_LIB_PATH) $(HAL_DRV_PATH)
 
-CPPFLAGS += -mmcu=$(MCU) -DF_CPU=$(AVR_FREQ) -D__PROG_TYPES_COMPAT__ \
-        -Wall -ffunction-sections -fdata-sections -Os $(INCLUDES)
+HAL_C_SRCS    += $(call rwildcard ,$(HAL_LIB_PATH),*.c)
+HAL_CPP_SRCS  += $(call rwildcard ,$(HAL_LIB_PATH),*.cpp)
+HAL_AS_SRCS   += $(call rwildcard ,$(HAL_LIB_PATH),*.S)
+DRV_C_SRCS    += $(call rwildcard ,$(HAL_DRV_PATH),*.c)
+VAL_C_SRCS    += $(call rwildcard ,$(ARDUINO_VAR_PATH)/$(VARIANT),*.c)
+VAL_CPP_SRCS  += $(call rwildcard ,$(ARDUINO_VAR_PATH)/$(VARIANT),*.cpp)
 
-CORE_C_SRCS     = $(wildcard $(ARDUINO_CORE_PATH)/*.c)
-CORE_C_SRCS    += $(wildcard $(ARDUINO_CORE_PATH)/avr-libc/*.c)
-CORE_CPP_SRCS   = $(wildcard $(ARDUINO_CORE_PATH)/*.cpp)
-CORE_AS_SRCS    = $(wildcard $(ARDUINO_CORE_PATH)/*.S)
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Drivers/$(HAL_SRC)_HAL_Driver/Inc
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Drivers/$(HAL_SRC)_HAL_Driver/Src
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/$(HAL_SRC)
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Drivers/CMSIS/Device/ST/$(HAL_SRC)/Include
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Drivers/CMSIS/Device/ST/$(HAL_SRC)/Source/Templates/gcc
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/ST/STM32_USB_Device_Library/Core/Inc
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/ST/STM32_USB_Device_Library/Cort/Src
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/open-amp/lib/include
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/libmetal/lib/include
+HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/virtual_driver
+
+HAL_OBJ_FILES  = $(HAL_C_SRCS:.c=.c.o) $(HAL_CPP_SRCS:.cpp=.cpp.o) $(HAL_AS_SRCS:.S=.S.o)
+DRV_OBJ_FILES  = $(DRV_C_SRCS:.c=.c.o) $(DRV_CPP_SRCS:.cpp=.cpp.o) $(DRV_AS_SRCS:.S=.S.o)
+VAL_OBJ_FILES  = $(VAL_C_SRCS:.c=.c.o) $(VAL_CPP_SRCS:.cpp=.cpp.o) $(VAL_AS_SRCS:.S=.S.o)
+
+CORE_C_SRCS     = $(call rwildcard ,$(ARDUINO_CORE_PATH),*.c)
+CORE_CPP_SRCS   = $(call rwildcard ,$(ARDUINO_CORE_PATH),*.cpp)
+CORE_AS_SRCS    = $(call rwildcard ,$(ARDUINO_CORE_PATH),*.S)
+
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/avr
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32/LL
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32/usb
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32/OpenAMP
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32/usb/hid
+CORE_INCLUDES += -I$(ARDUINO_CORE_PATH)/stm32/usb/cdc
+
+TOOL_INC_PATH  = -I$(CMSIS_DIR)/CMSIS/Core/Include
+TOOL_INC_PATH += -I$(CMSIS_DIR)/CMSIS/DSP/Include
+
+INCLUDES = $(ARD_CFLAGS) $(CORE_INCLUDES) $(SYS_INCLUDES) $(HAL_INCLUDES) \
+	   $(TOOL_INC_PATH) $(USER_INCLUDES) \
+	   -I$(ARDUINO_CORE_PATH) -I$(ARDUINO_VAR_PATH)/$(VARIANT)
+
+CPPFLAGS += $(ISAFLAGS) -Os $(INCLUDES)
 
 CORE_OBJ_FILES  = $(CORE_C_SRCS:.c=.c.o) $(CORE_CPP_SRCS:.cpp=.cpp.o) $(CORE_AS_SRCS:.S=.S.o)
 
@@ -125,7 +146,15 @@ $(OBJDIR)/core/%.c.o: $(ARDUINO_CORE_PATH)/%.c $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
 
+$(OBJDIR)/core/%.c.o: $(ARDUINO_VAR_PATH)/$(VARIANT)/%.c $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
+
 $(OBJDIR)/core/%.cpp.o: $(ARDUINO_CORE_PATH)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
+
+$(OBJDIR)/core/%.cpp.o: $(ARDUINO_VAR_PATH)/$(VARIANT)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
 
@@ -133,9 +162,27 @@ $(OBJDIR)/core/%.S.o: $(ARDUINO_CORE_PATH)/%.S $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
 
+VAL_OBJS = $(patsubst $(ARDUINO_VAR_PATH)/$(VARIANT)/%, $(OBJDIR)/core/%,$(VAL_OBJ_FILES))
 CORE_OBJS = $(patsubst $(ARDUINO_CORE_PATH)/%, $(OBJDIR)/core/%,$(CORE_OBJ_FILES))
 
-rwildcard=$(foreach d,$(wildcard $1*),$(call rwildcard,$d/,$2) $(filter $(subst *,%,$2),$d))
+$(OBJDIR)/hal/%.c.o: $(HAL_LIB_PATH)/%.c $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
+
+$(OBJDIR)/hal/%.c.o: $(HAL_DRV_PATH)/%.c $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
+
+$(OBJDIR)/hal/%.cpp.o: $(HAL_LIB_PATH)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
+
+$(OBJDIR)/hal/%.S.o: $(HAL_LIB_PATH)/%.S $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
+
+HAL_OBJS = $(patsubst $(HAL_LIB_PATH)/%, $(OBJDIR)/hal/%,$(HAL_OBJ_FILES))
+DRV_OBJS = $(patsubst $(HAL_DRV_PATH)/%, $(OBJDIR)/hal/%,$(DRV_OBJ_FILE))
 
 get_library_files  = $(if $(and $(wildcard $(1)/src), $(wildcard $(1)/library.properties)), \
 	$(call rwildcard,$(1)/src/,*.$(2)), \
@@ -148,61 +195,47 @@ USER_LIB_CPP_SRCS   := $(foreach lib, $(USER_LIBS), $(call get_library_files,$(l
 USER_LIB_C_SRCS     := $(foreach lib, $(USER_LIBS), $(call get_library_files,$(lib),c))
 USER_LIB_AS_SRCS    := $(foreach lib, $(USER_LIBS), $(call get_library_files,$(lib),S))
 
-LIB_OBJS = $(patsubst $(ARDUINO_LIB_PATH1)/%.c,$(OBJDIR)/libs/%.c.o,$(LIB_C_SRCS)) \
-	$(patsubst $(ARDUINO_LIB_PATH1)/%.cpp,$(OBJDIR)/libs/%.cpp.o,$(LIB_CPP_SRCS)) \
-	$(patsubst $(ARDUINO_LIB_PATH1)/%.S,$(OBJDIR)/libs/%.S.o,$(LIB_AS_SRCS))
-
-LIB_OBJS += $(patsubst $(ARDUINO_LIB_PATH2)/%.c,$(OBJDIR)/libs/%.c.o,$(LIB_C_SRCS)) \
-	$(patsubst $(ARDUINO_LIB_PATH2)/%.cpp,$(OBJDIR)/libs/%.cpp.o,$(LIB_CPP_SRCS)) \
-	$(patsubst $(ARDUINO_LIB_PATH2)/%.S,$(OBJDIR)/libs/%.S.o,$(LIB_AS_SRCS))
+LIB_OBJS = $(patsubst $(ARDUINO_LIB_PATH)/%.c,$(OBJDIR)/libs/%.c.o,$(LIB_C_SRCS)) \
+	$(patsubst $(ARDUINO_LIB_PATH)/%.cpp,$(OBJDIR)/libs/%.cpp.o,$(LIB_CPP_SRCS)) \
+	$(patsubst $(ARDUINO_LIB_PATH)/%.S,$(OBJDIR)/libs/%.S.o,$(LIB_AS_SRCS))
 
 USER_LIB_OBJS = $(patsubst $(USER_LIB_PATH)/%.cpp,$(OBJDIR)/userlibs/%.cpp.o,$(USER_LIB_CPP_SRCS)) \
 	$(patsubst $(USER_LIB_PATH)/%.c,$(OBJDIR)/userlibs/%.c.o,$(USER_LIB_C_SRCS)) \
 	$(patsubst $(USER_LIB_PATH)/%.S,$(OBJDIR)/userlibs/%.S.o,$(USER_LIB_AS_SRCS))
 
-$(OBJDIR)/libs/%.c.o: $(ARDUINO_LIB_PATH1)/%.c
+$(OBJDIR)/libs/%.c.o: $(ARDUINO_LIB_PATH)/%.c $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
 
-$(OBJDIR)/libs/%.cpp.o: $(ARDUINO_LIB_PATH1)/%.cpp
+$(OBJDIR)/libs/%.cpp.o: $(ARDUINO_LIB_PATH)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
 
-$(OBJDIR)/libs/%.S.o: $(ARDUINO_LIB_PATH1)/%.S
+$(OBJDIR)/libs/%.S.o: $(ARDUINO_LIB_PATH)/%.S $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
-
-$(OBJDIR)/libs/%.c.o: $(ARDUINO_LIB_PATH2)/%.c
-	@$(MKDIR) $(dir $@)
-	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
-
-$(OBJDIR)/libs/%.cpp.o: $(ARDUINO_LIB_PATH2)/%.cpp
-	@$(MKDIR) $(dir $@)
-	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
-
-$(OBJDIR)/libs/%.S.o: $(ARDUINO_LIB_PATH2)/%.S
-	@$(MKDIR) $(dir $@)
-	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
-
-$(OBJDIR)/userlibs/%.cpp.o: $(USER_LIB_PATH)/%.cpp
-	@$(MKDIR) $(dir $@)
-	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
 
 $(OBJDIR)/userlibs/%.c.o: $(USER_LIB_PATH)/%.c
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(CFLAGS_STD) $< -o $@
 
+$(OBJDIR)/userlibs/%.cpp.o: $(USER_LIB_PATH)/%.cpp
+	@$(MKDIR) $(dir $@)
+	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
+
 $(OBJDIR)/userlibs/%.S.o: $(USER_LIB_PATH)/%.S
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
 
-$(CORE_LIB): $(CORE_OBJS) $(LIB_OBJS) $(USER_LIB_OBJS)
-	$(AR) rcs $@ $(CORE_OBJS) $(LIB_OBJS) $(USER_LIB_OBJS)
+LDFLAGS = $(ISAFLAGS) ${VARIANT_FLAG} -Os --specs=nano.specs -Wl,--defsym=LD_FLASH_OFFSET=0 -Wl,--defsym=LD_MAX_SIZE=524288 -Wl,--defsym=LD_MAX_DATA_SIZE=131072 -Wl,--cref -Wl,--check-sections -Wl,--gc-sections -Wl,--entry=Reset_Handler -Wl,--unresolved-symbols=report-all -Wl,--warn-common -Wl,--default-script=$(ARDUINO_DIR)/variants/$(VARIANT)/ldscript.ld -Wl,--script=$(ARDUINO_DIR)/system/ldscript.ld -L$(CMSIS_DIR)/CMSIS/DSP/Lib/GCC/ -larm_cortexM4lf_math -Wl,--start-group
+
+$(CORE_LIB): $(VAL_OBJS) $(CORE_OBJS) $(HAL_OBJS) $(DRV_OBJS) $(LIB_OBJS) $(USER_LIB_OBJS)
+	$(AR) rcs $@ $^
 
 # Building arduino binary image
 
 $(ELF): $(SRC) $(CORE_LIB)
-	$(CXX) $(INCLUDES) $(SYS_INCLUDES) $(CPPFLAGS) $(CXXFLAGS) $^ -o $@
+	$(CC) $(INCLUDES) $(LDFLAGS) $^ -lc -Wl,--end-group -Xlinker -Map=output.map -lm -lgcc -lstdc++ -o $@
 
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -210,9 +243,8 @@ $(BIN): $(ELF)
 $(HEX): $(ELF)
 	$(OBJCOPY) -O ihex -R .eeprom $< $@
 
-upload: $(HEX)
-	stty -F $(MONITOR_PORT) 1200; sleep 1
-	avrdude -V -D -v -c $(AVRDUDE_PROGRAMMER) -p $(MCU) -P $(MONITOR_PORT) -b $(MONITOR_BAUDRATE) -U flash:w:$<:i
+upload-mass: $(BIN)
+	$(MASS_TOOL) -I $< $(MASS_OPTION)
 
 clean:
-	rm -fr $(BIN) $(HEX) $(CORE_LIB) $(OBJDIR)/core $(OBJDIR)/libs $(OBJDIR)/platformlibs $(OBJDIR)/userlibs
+	rm -fr $(BIN) $(HEX) $(CORE_LIB) $(OBJDIR)/core $(OBJDIR)/hal $(OBJDIR)/libs $(OBJDIR)/platformlibs $(OBJDIR)/userlibs
