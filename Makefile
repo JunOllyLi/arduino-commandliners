@@ -1,6 +1,7 @@
 
 # Adjast for your board
 # Manually add them which Arduino IDE gives automotically
+BUILD_DIR ?= .
 
 ## NUCLEO-F411RE
 MCU ?= cortex-m4
@@ -16,17 +17,17 @@ ARD_CFLAGS := -DSTM32F4xx -DARDUINO=10813 -DARDUINO_FEATHER_F405 -DARDUINO_ARCH_
 #MONITOR_PORT ?= /dev/ttyUSB0
 
 # List library names you only use in your sources
-ARDUINO_LIBS ?= SoftwareSerial SD SeeedGrayOLED USBcore Wire
-USER_LIB_PATH ?= $(HOME)/sketchbook/libraries
+ARDUINO_LIBS ?= SoftwareSerial SD SeeedGrayOLED USBcore SPI Wire STM32duino_FreeRTOS Adafruit_SH110X Adafruit_GFX_Library Adafruit_BusIO Adafruit_MCP23017_Arduino_Library
+USER_LIB_PATH ?= $(HOME)/Arduino/libraries
 
 # File name of your sources
 SRC := main.cpp
 
 # File name of generated binary to upload to Arduino
 TARGET := uploadimg
-ELF := $(TARGET).elf
-BIN := $(TARGET).bin
-HEX := $(TARGET).hex
+ELF := ${BUILD_DIR}/$(TARGET).elf
+BIN := ${BUILD_DIR}/$(TARGET).bin
+HEX := ${BUILD_DIR}/$(TARGET).hex
 
 # Change them where Arduino IDE is installed
 ARM_GCC_PATH := $(HOME)/.arduino15/packages/STMicroelectronics/tools/xpack-arm-none-eabi-gcc/10.3.1-2.3/bin
@@ -36,13 +37,13 @@ ARDUINO_CORE_PATH = $(ARDUINO_DIR)/cores/arduino
 ARDUINO_VAR_PATH ?= $(ARDUINO_DIR)/variants
 TOOLS_DIR = $(HOME)/.arduino15/packages/STMicroelectronics/tools
 CMSIS_DIR = $(TOOLS_DIR)/CMSIS/5.7.0
+COMMLIB_DIR = $(HOME)/.arduino15/libraries
 
 # Only have to edit above
 #############################################################################
 # Others below are for building and linking libraries automatically.
 #SHELL = /bin/bash -xue
-
-OBJDIR = .
+OBJDIR = ${BUILD_DIR}
 CORE_LIB = $(OBJDIR)/libcore.a
 
 CC := $(ARM_GCC_PATH)/arm-none-eabi-gcc 
@@ -96,6 +97,7 @@ HAL_PATH      = $(HAL_LIB_PATH) $(HAL_DRV_PATH)
 
 HAL_C_SRCS    += $(call rwildcard ,$(HAL_LIB_PATH),*.c)
 HAL_CPP_SRCS  += $(call rwildcard ,$(HAL_LIB_PATH),*.cpp)
+HAL_CPP_SRCS  += $(call rwildcard ,$(COMMLIB_DIR)/SD,*.cpp)
 HAL_AS_SRCS   += $(call rwildcard ,$(HAL_LIB_PATH),*.S)
 DRV_C_SRCS    += $(call rwildcard ,$(HAL_DRV_PATH),*.c)
 VAL_C_SRCS    += $(call rwildcard ,$(ARDUINO_VAR_PATH)/$(VARIANT),*.c)
@@ -112,6 +114,7 @@ HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP
 HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/open-amp/lib/include
 HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/libmetal/lib/include
 HAL_INCLUDES  += -I$(STM32_HAL_PATH)/Middlewares/OpenAMP/virtual_driver
+HAL_INCLUDES  += -I$(COMMLIB_DIR)/SD/src/
 
 HAL_OBJ_FILES  = $(HAL_C_SRCS:.c=.c.o) $(HAL_CPP_SRCS:.cpp=.cpp.o) $(HAL_AS_SRCS:.S=.S.o)
 DRV_OBJ_FILES  = $(DRV_C_SRCS:.c=.c.o) $(DRV_CPP_SRCS:.cpp=.cpp.o) $(DRV_AS_SRCS:.S=.S.o)
@@ -136,7 +139,7 @@ INCLUDES = $(ARD_CFLAGS) $(CORE_INCLUDES) $(SYS_INCLUDES) $(HAL_INCLUDES) \
 	   $(TOOL_INC_PATH) $(USER_INCLUDES) \
 	   -I$(ARDUINO_CORE_PATH) -I$(ARDUINO_VAR_PATH)/$(VARIANT)
 
-CPPFLAGS += $(ISAFLAGS) -Os $(INCLUDES)
+CPPFLAGS += -g -funwind-tables $(ISAFLAGS) -Og $(INCLUDES)
 
 CORE_OBJ_FILES  = $(CORE_C_SRCS:.c=.c.o) $(CORE_CPP_SRCS:.cpp=.cpp.o) $(CORE_AS_SRCS:.S=.S.o)
 
@@ -177,11 +180,16 @@ $(OBJDIR)/hal/%.cpp.o: $(HAL_LIB_PATH)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
 
+$(OBJDIR)/hal/%.cpp.o: $(COMMLIB_DIR)/%.cpp $(COMMON_DEPS) | $(OBJDIR)
+	@$(MKDIR) $(dir $@)
+	$(CXX) -MMD -c $(CPPFLAGS) $(CXXFLAGS_STD) $< -o $@
+
 $(OBJDIR)/hal/%.S.o: $(HAL_LIB_PATH)/%.S $(COMMON_DEPS) | $(OBJDIR)
 	@$(MKDIR) $(dir $@)
 	$(CC) -MMD -c $(CPPFLAGS) $(ASFLAGS) $< -o $@
 
-HAL_OBJS = $(patsubst $(HAL_LIB_PATH)/%, $(OBJDIR)/hal/%,$(HAL_OBJ_FILES))
+HAL_OBJS_T = $(patsubst $(HAL_LIB_PATH)/%, $(OBJDIR)/hal/%,$(HAL_OBJ_FILES))
+HAL_OBJS = $(patsubst $(COMMLIB_DIR)/%, $(OBJDIR)/hal/%,$(HAL_OBJS_T))
 DRV_OBJS = $(patsubst $(HAL_DRV_PATH)/%, $(OBJDIR)/hal/%,$(DRV_OBJ_FILE))
 
 get_library_files  = $(if $(and $(wildcard $(1)/src), $(wildcard $(1)/library.properties)), \
@@ -235,7 +243,7 @@ $(CORE_LIB): $(VAL_OBJS) $(CORE_OBJS) $(HAL_OBJS) $(DRV_OBJS) $(LIB_OBJS) $(USER
 # Building arduino binary image
 
 $(ELF): $(SRC) $(CORE_LIB)
-	$(CC) $(INCLUDES) $(LDFLAGS) $^ -lc -Wl,--end-group -Xlinker -Map=output.map -lm -lgcc -lstdc++ -o $@
+	$(CC) $(INCLUDES) $(LDFLAGS) $^ -lc -Wl,--end-group -Xlinker -Map=${BUILD_DIR}/output.map -lm -lgcc -lstdc++ -o $@
 
 $(BIN): $(ELF)
 	$(OBJCOPY) -O binary $< $@
@@ -248,3 +256,39 @@ upload-mass: $(BIN)
 
 clean:
 	rm -fr $(BIN) $(HEX) $(CORE_LIB) $(OBJDIR)/core $(OBJDIR)/hal $(OBJDIR)/libs $(OBJDIR)/platformlibs $(OBJDIR)/userlibs
+
+ALT_C_FLAGS = $(subst ",\\\\\\\\\\",$(CFLAGS_STD))
+ALT_CXX_FLAGS = $(subst ",\\\\\\\\\\",$(CXXFLAGS_STD))
+generate_toolchain_file:
+	echo -n "set (CMAKE_C_COMPILER " > ${TOOLCHAIN_FILE}
+	echo -n $(CC)>> ${TOOLCHAIN_FILE}
+	echo ")" >> ${TOOLCHAIN_FILE}
+
+	echo -n "set (CMAKE_CXX_COMPILER " >> ${TOOLCHAIN_FILE}
+	echo -n $(CXX) >> ${TOOLCHAIN_FILE}
+	echo ")" >> ${TOOLCHAIN_FILE}
+
+	echo -n "set (CMAKE_C_FLAGS \"" >> ${TOOLCHAIN_FILE}
+	echo -n $(CPPFLAGS) $(ALT_C_FLAGS) >> ${TOOLCHAIN_FILE}
+	echo " -DRTOS_FREERTOS -DPCB_ARDUINO\")" >> ${TOOLCHAIN_FILE}
+
+	echo -n "set (CMAKE_CXX_FLAGS \"" >> ${TOOLCHAIN_FILE}
+	echo -n $(CPPFLAGS) $(ALT_CXX_FLAGS) >> ${TOOLCHAIN_FILE}
+	echo " -DRTOS_FREERTOS -DPCB_ARDUINO\")" >> ${TOOLCHAIN_FILE}
+
+	echo "set (PCB ARDUINO)" >> ${TOOLCHAIN_FILE}
+	echo "set (ARDUINO_PCB FEATHER_F405)" >> ${TOOLCHAIN_FILE}
+
+	echo "set (CMAKE_TRY_COMPILE_TARGET_TYPE \"STATIC_LIBRARY\")" >> ${TOOLCHAIN_FILE}
+	echo "set (CUSTOM_TOOLCHAIN_OUTPUT_LIB ON)" >> ${TOOLCHAIN_FILE}
+
+${BUILD_DIR}/opentx.elf: $(CORE_LIB) ${BUILD_DIR}/../opentx/radio/src/libfirmware.a
+	$(CC) $(LDFLAGS) $^ -lc -Wl,--end-group -Xlinker -Map=${BUILD_DIR}/output.map -lm -lgcc -lstdc++ -o $@
+
+${BUILD_DIR}/opentx.bin: ${BUILD_DIR}/opentx.elf
+	$(OBJCOPY) -O binary $< $@
+
+firmware: ${BUILD_DIR}/opentx.bin
+
+flash_firmware: firmware
+	st-flash write ${BUILD_DIR}/opentx.bin 0x08000000
