@@ -139,7 +139,7 @@ INCLUDES = $(ARD_CFLAGS) $(CORE_INCLUDES) $(SYS_INCLUDES) $(HAL_INCLUDES) \
 	   $(TOOL_INC_PATH) $(USER_INCLUDES) \
 	   -I$(ARDUINO_CORE_PATH) -I$(ARDUINO_VAR_PATH)/$(VARIANT)
 
-CPPFLAGS += -g -funwind-tables $(ISAFLAGS) -Og $(INCLUDES)
+CPPFLAGS += -g -DPIN_SERIAL3_RX=PB11 -DPIN_SERIAL3_TX=PB10 -funwind-tables $(ISAFLAGS) -Og $(INCLUDES)
 
 CORE_OBJ_FILES  = $(CORE_C_SRCS:.c=.c.o) $(CORE_CPP_SRCS:.cpp=.cpp.o) $(CORE_AS_SRCS:.S=.S.o)
 
@@ -292,3 +292,4 @@ firmware: ${BUILD_DIR}/opentx.bin
 
 flash_firmware: firmware
 	st-flash write ${BUILD_DIR}/opentx.bin 0x08000000
+	st-flash reset
