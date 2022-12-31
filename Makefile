@@ -282,7 +282,7 @@ generate_toolchain_file:
 	echo "set (CMAKE_TRY_COMPILE_TARGET_TYPE \"STATIC_LIBRARY\")" >> ${TOOLCHAIN_FILE}
 	echo "set (CUSTOM_TOOLCHAIN_OUTPUT_LIB ON)" >> ${TOOLCHAIN_FILE}
 
-${BUILD_DIR}/opentx.elf: $(CORE_LIB) ${BUILD_DIR}/../opentx/radio/src/libfirmware.a
+${BUILD_DIR}/opentx.elf: $(CORE_LIB) ${BUILD_DIR}/../opentx/arduino/radio/src/libtx_firmware.a
 	$(CC) $(LDFLAGS) $^ -lc -Wl,--end-group -Xlinker -Map=${BUILD_DIR}/output.map -lm -lgcc -lstdc++ -o $@
 
 ${BUILD_DIR}/opentx.bin: ${BUILD_DIR}/opentx.elf
